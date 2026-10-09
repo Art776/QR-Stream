@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>QR Sender (Отправитель)</title>
+    <!-- Подключаем библиотеку для генерации QR -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #111; color: #fff; margin-top: 30px; }
+        #qrcode { background: white; padding: 20px; display: inline-block; border-radius: 10px; margin: 20px 0; }
+        #info { font-size: 18px; color: #aaa; margin-bottom: 15px; }
+        .nav-link { color: #888; text-decoration: none; display: inline-block; margin-top: 20px; }
+        .nav-link:hover { color: #fff; }
+    </style>
+</head>
+<body>
+
+    <h2>Отправитель данных</h2>
+    <div id="info">Подготовка...</div>
+    <div id="qrcode"></div>
+    
+    <div>
+        <a href="index.html" class="nav-link">← На главную</a>
+    </div>
+
+    <script>
+        // Функция разбиения текста на куски
+        function createChunks(text, chunkSize = 120) {
+            const chunks = [];
+            for (let i = 0; i < text.length; i += chunkSize) {
+                chunks.push(text.slice(i, i + chunkSize));
+            }
+            
+            const sessionId = Math.random().toString(36).substring(2, 8);
+            const total = chunks.length;
+
+            return chunks.map((chunk, index) => JSON.stringify({
+                id: sessionId,
+                total: total,
+                index: index,
+                data: chunk
+            }));
+        }
+
+        // Большие данные для передачи
+        const rawData = "Привет! Это тестовая строка данных для передачи через анимированные QR-коды с помощью JavaScript и браузера. ".repeat(15);
+        const packets = createChunks(rawData, 120);
+
+        let currentIndex = 0;
+        const qrContainer = document.getElementById("qrcode");
+        const infoContainer = document.getElementById("info");
+
+        // Создаем экземпляр QR-генератора
+        const qrCodeObj = new QRCode(qrContainer, {
+            text: packets[0],
+            width: 300,
+            height: 300
+        });
+
+        // Функция анимации (переключение кадров)
+        function nextFrame() {
+            qrCodeObj.makeCode(packets[currentIndex]);
+            infoContainer.innerText = `Кадр: ${currentIndex + 1} / ${packets.length}`;
+            
+            currentIndex = (currentIndex + 1) % packets.length; // Зацикливаем показ
+        }
+
+        // Меняем кадры 8 раз в секунду (125 мс)
+        setInterval(nextFrame, 125);
+    </script>
+
+</body>
+</html>

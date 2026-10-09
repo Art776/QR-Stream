@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>QR Receiver (Получатель)</title>
+    <!-- Подключаем библиотеку jsQR для распознавания -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #111; color: #fff; margin-top: 20px; }
+        video { width: 100%; max-width: 400px; border-radius: 10px; border: 2px solid #444; }
+        #progress { font-size: 20px; margin: 15px 0; color: #4CAF50; }
+        #result { background: #222; padding: 15px; border-radius: 8px; margin: 20px auto; max-width: 500px; word-break: break-all; text-align: left; }
+        .nav-link { color: #888; text-decoration: none; display: inline-block; margin-top: 10px; }
+        .nav-link:hover { color: #fff; }
+    </style>
+</head>
+<body>
+
+    <h2>Сканер данных</h2>
+    <video id="video" playsinline></video>
+    <div id="progress">Ожидание кадров... (Собрано: 0%)</div>
+    <div id="result">Здесь появится собранный результат...</div>
+    
+    <div>
+        <a href="index.html" class="nav-link">← На главную</a>
+    </div>
+
+    <script>
+        const video = document.getElementById("video");
+        const progressEl = document.getElementById("progress");
+        const resultEl = document.getElementById("result");
+
+        let receivedChunks = {};
+        let totalChunks = null;
+        let currentSessionId = null;
+        let isCompleted = false;
+
+        // Запуск камеры
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+            .then(stream => {
+                video.srcObject = stream;
+                video.setAttribute("playsinline", true);
+                video.play();
+                requestAnimationFrame(tick);
+            })
+            .catch(err => {
+                alert("Ошибка доступа к камере: " + err);
+            });
+
+        const canvasElement = document.createElement("canvas");
+        const canvas = canvasElement.getContext("2d");
+
+        function tick() {
+            if (video.readyState === video.HAVE_ENOUGH_DATA && !isCompleted) {
+                canvasElement.height = video.videoHeight;
+                canvasElement.width = video.videoWidth;
+                canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+                
+                const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                    inversionAttempts: "dontInvert",
+                });
+
+                if (code) {
+                    try {
+                        const packet = JSON.parse(code.data);
+                        handlePacket(packet);
+                    } catch (e) {
+                        // Не наш формат QR-кода, игнорируем
+                    }
+                }
+            }
+            requestAnimationFrame(tick);
+        }
+
+        function handlePacket(packet) {
+            // Если началась новая сессия, сбрасываем старые данные
+            if (currentSessionId !== packet.id) {
+                currentSessionId = packet.id;
+                receivedChunks = {};
+                totalChunks = packet.total;
+            }
+
+            // Записываем кусок, если его еще нет
+            if (!receivedChunks[packet.index]) {
+                receivedChunks[packet.index] = packet.data;
+                
+                const collectedCount = Object.keys(receivedChunks).length;
+                const percent = Math.round((collectedCount / totalChunks) * 100);
+                progressEl.innerText = `Собрано: ${collectedCount} / ${totalChunks} (${percent}%)`;
+
+                // Проверяем, все ли части собраны
+                if (collectedCount === totalChunks) {
+                    isCompleted = true;
+                    assembleData();
+                }
+            }
+        }
+
+        function assembleData() {
+            let fullData = "";
+            for (let i = 0; i < totalChunks; i++) {
+                fullData += receivedChunks[i];
+            }
+            progressEl.innerText = "Успешно собрано!";
+            resultEl.innerText = fullData;
+        }
+    </script>
+
+</body>
+</html>
